@@ -1,0 +1,308 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":"csharp"},{"aliases":[],"languageName":"pwsh","name":"pwsh"}]}}
+
+#!markdown
+
+# Frontend development helper
+
+This notebook is a helper for frontend development.
+
+It will provide you with the key elements to setup your frontend development workspace.
+
+> **Note**
+> The Microsoft documentation page used as reference to build this notebook are:
+> - [Create and build a code component](https://learn.microsoft.com/en-us/power-apps/developer/component-framework/create-custom-controls-using-pcf)
+> - [Package a code component](https://learn.microsoft.com/en-us/power-apps/developer/component-framework/import-custom-controls)
+
+#!markdown
+
+## 0. Prerequisites
+
+#!markdown
+
+The command we will use in this notebook are mostly related to [Power Platform CLI](https://learn.microsoft.com/en-us/power-platform/developer/cli/introduction).
+
+One of the easiest way to install it with our current configuration if it is not already present is trough the dotnet cli.
+
+#!pwsh
+
+Write-Host "Checking if Power Platform CLI is installed..." -ForegroundColor Blue
+
+try {
+    $powerPlatformCliVersion = pac help
+} catch {
+    Write-Host "Power Platform CLI does not seem installed. Installing..." -ForegroundColor Blue
+    dotnet tool install --global Microsoft.PowerApps.CLI.Tool
+}
+
+Write-Host "👍🏼 Power Platform CLI is installed!" -ForegroundColor Green
+
+#!pwsh
+
+Write-Host "Get the absolute path of the current notebook parent folder..." -ForegroundColor Blue
+$notebookPath = (Get-Location).Path
+Write-Host "👍🏼 The absolute path of the current notebook parent folder is $notebookPath" -ForegroundColor Green
+
+#!markdown
+
+## 1. Initialize a Power Platform solution
+
+#!markdown
+
+To initialize a Power Platform solution, we will use the `pac solution init` command as described below:
+
+```bash
+Initializes a directory with a new Dataverse solution project
+
+Commands: 
+Usage: pac solution init --publisher-name --publisher-prefix [--outputDirectory]
+
+  --publisher-name            Name of the Dataverse solution publisher (alias: -pn)
+  --publisher-prefix          Customization prefix value for the Dataverse solution publisher (alias: -pp)
+  --outputDirectory           Output directory (alias: -o)
+```
+
+#!pwsh
+
+#!set --name solutionName --value @input:"Please enter a Power Platform solution name"
+
+#!pwsh
+
+#!set --name publisherName --value @input:"Please enter a publisher name"
+
+#!pwsh
+
+#!set --name publisherPrefix --value @input:"Please enter a publisher prefix"
+
+#!pwsh
+
+Write-Host "Validate that all required inputs have been provided..." -ForegroundColor Blue
+
+if (-not $solutionName -or $solutionName -eq "") {
+    Write-Host "Please provide a solution name." -ForegroundColor Red
+    exit 1
+}
+
+if (-not $publisherName -or $publisherName -eq "") {
+    Write-Host "Please provide a publisher name." -ForegroundColor Red
+    exit 1
+}
+
+if (-not $publisherPrefix -or $publisherPrefix -eq "") {
+    Write-Host "Please provide a publisher prefix." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "👍🏼 All required inputs have been provided." -ForegroundColor Green
+
+Write-Host "Move to the src/solutions/ folder..." -ForegroundColor Blue
+
+$solutionsPath = Join-Path $notebookPath "../solutions"
+if (!(Test-Path -Path $solutionsPath)) {
+    Write-Host "src/solutions/ folder does not exist. Creating..." -ForegroundColor Blue
+    New-Item -ItemType Directory -Path $solutionsPath -Force | Out-Null
+}
+cd $solutionsPath
+
+Write-Host "👍🏼 Moved to the src/solutions/ folder..." -ForegroundColor Green
+
+Write-Host "Check if the Power Platform solution already exists..." -ForegroundColor Blue
+
+if (Test-Path $solutionName) {
+    Write-Host "👍🏼 Power Platform solution already exists!" -ForegroundColor Green
+    exit 0 # Exit with success
+}
+
+Write-Host "Create a new folder with the provided name for the solution and move into it..." -ForegroundColor Blue
+mkdir $solutionName
+cd $solutionName
+
+Write-Host "Initialization of the Power Platform solution..." -ForegroundColor Blue
+pac solution init --publisher-name $publisherName --publisher-prefix $publisherPrefix
+
+Write-Host "👍🏼 Power Platform solution initialized!" -ForegroundColor Green
+
+#!markdown
+
+### 1.1 Set the solution package type to Managed
+
+#!markdown
+
+In the cdsproj file generated in the previous step, you can set the package type to Managed by setting the value of the <SolutionPackageType> element (_under <PropertyGroup>_) to `Managed`. This will ensure that the solution package is managed and cannot be customized by the customers.
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    ...
+    <PropertyGroup>
+        <SolutionPackageType>Managed</SolutionPackageType>
+        <SolutionPackageEnableLocalization>false</SolutionPackageEnableLocalization>
+    </PropertyGroup>
+    ...
+</Project>
+```
+
+#!pwsh
+
+$solutionsPath = Join-Path $notebookPath "../solutions"
+
+#!pwsh
+
+ls /workspaces/PowerPlatform-DevEx-With-GitHub-Workshop/src/solutions/PCFComponents/
+
+#!pwsh
+
+Write-Host "Update the cdsproj file to enable the solution package localization..." -ForegroundColor Blue
+$cdsprojPath = "$solutionsPath/$solutionName/$solutionName.cdsproj"
+
+# Define the old and new text
+$oldText = "<!--`n  <PropertyGroup>`n    <SolutionPackageType>Managed</SolutionPackageType>`n    <SolutionPackageEnableLocalization>false</SolutionPackageEnableLocalization>`n  </PropertyGroup>`n  -->"
+$newText = "<PropertyGroup>`n    <SolutionPackageType>Managed</SolutionPackageType>`n    <!-- <SolutionPackageEnableLocalization>false</SolutionPackageEnableLocalization> -->`n  </PropertyGroup>"
+
+# Read the file content
+$content = Get-Content -Path $cdsprojPath -Raw
+
+# Replace the old text with the new text
+$content = $content -replace [regex]::Escape($oldText), $newText
+
+# Write the new content back to the file
+Set-Content -Path $cdsprojPath -Value $content
+
+Write-Host "👍🏼 The cdsproj file has been updated!" -ForegroundColor Green
+
+#!markdown
+
+## 2. Initialize a new PCF component
+
+#!markdown
+
+To initialize a PCF component, we will use the `pac pck init` command as described below:
+
+```bash
+Initializes a directory with a new Power Apps component framework project
+
+Commands: 
+Usage: pac pcf init [--namespace] [--name] [--template] [--framework] [--outputDirectory] [--run-npm-install]
+
+  --namespace                 The namespace for the component. (alias: -ns)
+  --name                      The name for the component. (alias: -n)
+  --template                  Choose a template for the component. (alias: -t)
+                              Values: field, dataset
+  --framework                 The rendering framework for control. The default value is 'none', which means HTML. (alias: -fw)
+                              Values: none, react
+  --outputDirectory           Output directory (alias: -o)
+  --run-npm-install           Auto run 'npm install' after the control is created. The default value is 'false'. (alias: -npm)
+```
+
+#!pwsh
+
+#!set --name pcfNamespace --value @input:"Please enter a namespace for the PCF component"
+
+#!pwsh
+
+#!set --name pcfName --value @input:"Please enter a name for the PCF component"
+
+#!csharp
+
+// Get the PCF template for its creation
+// The user has a maximum of 3 attempts to provide a valid input
+using Microsoft.DotNet.Interactive;
+
+var maxAttempts = 3;
+var pcfTemplate = "";
+
+for (int attempt = 1; attempt <= maxAttempts; attempt++)
+{
+    pcfTemplate = await Kernel.GetInputAsync("Please select the template for the PCF component (Values: field, dataset)");
+
+    if (pcfTemplate == "field" || pcfTemplate == "dataset")
+    {
+        break;
+    }
+    else
+    {
+        Console.WriteLine($"Invalid input. Attempt {attempt} of {maxAttempts}.");
+    }
+}
+
+// If maximum of attempts has been reached and the input is still invalid, exit the script with an error message
+if (pcfTemplate != "field" && pcfTemplate != "dataset")
+{
+    throw new Exception("Invalid input. Maximum attempts reached.");
+}
+
+#!pwsh
+
+#!set --value @csharp:pcfTemplate --name pcfTemplate
+
+#!pwsh
+
+Write-Host "Validate that all required inputs have been provided..." -ForegroundColor Blue
+
+if (-not $pcfNamespace -or $pcfNamespace -eq "") {
+    Write-Host "Please provide a namespace for the PCF component." -ForegroundColor Red
+    exit 1
+}
+
+if (-not $pcfName -or $pcfName -eq "") {
+    Write-Host "Please provide a name for the PCF component." -ForegroundColor Red
+    exit 1
+}
+
+Write-Host "Move to the src/pcf-components/ folder..." -ForegroundColor Blue
+$pcfComponentsPath = Join-Path $notebookPath "../pcf-components"
+if (!(Test-Path -Path $pcfComponentsPath)) {
+    Write-Host "src/pcf-components/ folder does not exist. Creating..." -ForegroundColor Blue
+    New-Item -ItemType Directory -Path $pcfComponentsPath -Force | Out-Null
+}
+cd $pcfComponentsPath
+
+Write-Host "Check if the PCF component namespace already exists..." -ForegroundColor Blue
+if (Test-Path $pcfNamespace) {
+    Write-Host "👍🏼 PCF component namespace already exists!" -ForegroundColor Green
+} else {
+    Write-Host "Create a new folder for the PCF component namespace..." -ForegroundColor Blue
+    mkdir $pcfNamespace
+}
+
+Write-Host "Move to the PCF component namespace folder..." -ForegroundColor Blue
+cd $pcfNamespace
+
+Write-Host "Check if the PCF component already exists..." -ForegroundColor Blue
+if (Test-Path $pcfName) {
+    Write-Host "👍🏼 PCF component already exists!" -ForegroundColor Green
+    exit 0 # Exit with success
+}
+
+Write-Host "Initialize new PCF component..." -ForegroundColor Blue
+pac pcf init --namespace $pcfNamespace --name $pcfName --template $pcfTemplate --framework react --outputDirectory ./ --run-npm-install
+
+Write-Host "👍🏼 PCF component initialized!" -ForegroundColor Green
+
+#!markdown
+
+## 3. Add the new PCF component to the solution
+
+#!markdown
+
+To add the new PCF component as a reference to the solution, we will use the `pac solution add-reference` command as described below:
+
+```bash
+Adds a reference from the project in the current directory to the project at 'path'
+
+Commands: 
+Usage: pac solution add-reference --path
+
+  --path                      The path to the referenced project (alias: -p)
+```
+
+#!pwsh
+
+Write-Host "Move to the src/solutions/$solutionName folder..." -ForegroundColor Blue
+cd $notebookPath/../solutions/$solutionName
+
+Write-Host "Add the PCF component to the solution..." -ForegroundColor Blue
+pac solution add-reference --path $notebookPath/../pcf-components/$pcfNamespace
+
+Write-Host "👍🏼 PCF component added to the solution!" -ForegroundColor Green

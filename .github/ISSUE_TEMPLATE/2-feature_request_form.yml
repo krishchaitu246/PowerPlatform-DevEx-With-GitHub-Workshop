@@ -1,0 +1,35 @@
+name: Feature Request (form)
+description: Suggest an idea for this project
+title: "[Feature] "
+labels: ["enhancement"]
+projects: []
+assignees: []
+body:
+  - type: textarea
+    id: feature_description
+    attributes:
+      label: Feature Description
+      description: Describe the feature you are requesting
+      placeholder: "Ex. I would like to see a new button on the homepage that allows me to quickly access my account settings"
+    validations:
+      required: true
+  - type: dropdown
+    id: feature_priority
+    attributes:
+      label: Priority
+      description: Choose the priority of this feature request
+      options:
+        - Low
+        - Medium
+        - High
+      default: 1
+    validations:
+      required: true
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](./CODE_OF_CONDUCT.md)
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
